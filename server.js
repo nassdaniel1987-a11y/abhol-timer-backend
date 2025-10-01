@@ -2,16 +2,21 @@ const express = require('express');
 const webpush = require('web-push');
 const bodyParser = require('body-parser');
 const path = require('path');
+const cors = require('cors'); // Hinzugefügt für die Reparatur
 
 const app = express();
 
-// Middleware für statische Dateien und JSON
-app.use(express.static(path.join(__dirname, '..'))); // Erlaube Zugriff auf das Hauptverzeichnis
+// Middleware
+// WICHTIG: Die Reihenfolge hier ist wichtig.
+app.use(cors()); // Erlaubt Anfragen von anderen Domains (z.B. Netlify)
+app.use(express.static(path.join(__dirname, '..')));
 app.use(bodyParser.json());
 
-// --- VAPID KEYS HIER EINTRAGEN ---
-const publicVapidKey = 'BBCwU1NChqqlA0-5CGrNIgQOtc5NBQpyznehELP79SU40qRrSQcuHp9Bq0aVHDP941Jnv09JKjTkxUnZ0I7ua7c';
-const privateVapidKey = 'GIkIrS0_pXAbQjUUnnlln1uQ16-FaFtb3EyySYRVaZI';
+
+// --- DEINE VAPID KEYS HIER EINTRAGEN ---
+// Ersetze diese mit den Keys, die du mit 'npx web-push generate-vapid-keys' erstellt hast.
+const publicVapidKey = 'BCk200YLYo1f3N0kmnXFE5OmIZujsSsP_SUpJfLrNgW7iwFdY2cxaPt34qi4IslHC2Yt85CJM3nSpPLLSgJIo2M';
+const privateVapidKey = 'O0Z0WqTWYg3q2cDyzP2gR9Ai64sYgGnMEEODhpDSzs8';
 
 webpush.setVapidDetails(
   'mailto:test@example.com', // Eine Kontakt-E-Mail
@@ -21,7 +26,6 @@ webpush.setVapidDetails(
 
 // In einer echten App wäre dies eine Datenbank.
 // Für unser Beispiel speichern wir die Abonnements im Speicher.
-// Format: { childId: { subscription: PushSubscription, name: string } }
 let subscriptions = {};
 
 // Route zum Speichern eines Abonnements
@@ -46,7 +50,6 @@ app.post('/api/delete-subscription', (req, res) => {
 
 
 // Route, um eine Benachrichtigung zu planen
-// Das Frontend sagt dem Backend, wann es eine Nachricht senden soll.
 app.post('/api/schedule-notification', (req, res) => {
   const { childId, time } = req.body;
 
@@ -63,7 +66,6 @@ app.post('/api/schedule-notification', (req, res) => {
 
   const now = new Date();
   if (notificationTime <= now) {
-      // Wenn die Zeit schon vorbei ist, nicht planen (oder auf morgen setzen, je nach Logik)
       console.log(`⏰ Planungszeit für ${name} liegt in der Vergangenheit. Überspringe.`);
       return res.status(200).json({ message: 'Zeit liegt in der Vergangenheit, nichts geplant.' });
   }
@@ -73,7 +75,6 @@ app.post('/api/schedule-notification', (req, res) => {
   console.log(`📅 Benachrichtigung für "${name}" geplant in ${Math.round(delay / 1000 / 60)} Minuten.`);
 
   setTimeout(() => {
-    // Prüfen, ob das Abo noch existiert, bevor wir senden
     if (subscriptions[childId]) {
         const payload = JSON.stringify({
             title: '🔔 Gleich abholen!',
@@ -84,7 +85,6 @@ app.post('/api/schedule-notification', (req, res) => {
         webpush.sendNotification(subscription, payload)
             .catch(error => {
                 console.error(`Fehler beim Senden an ${name}:`, error.statusCode);
-                // Wenn das Abo abgelaufen ist (Code 410), löschen wir es
                 if (error.statusCode === 410) {
                     delete subscriptions[childId];
                 }
